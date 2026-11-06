@@ -1,0 +1,73 @@
+
+name: Delete TRKY HTML Files
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Confirm deletion of HTML files inside trky/"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  delete-html:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Delete HTML files from trky only
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          folder = Path("trky")
+
+          if not folder.is_dir() or folder.is_symlink():
+              raise SystemExit("ERROR: trky folder not found or invalid")
+
+          deleted = []
+
+          for file in folder.iterdir():
+              if (
+                  file.is_file()
+                  and not file.is_symlink()
+                  and file.name.lower() != "index.html"
+                  and file.suffix.lower() == ".html"
+              ):
+                  subprocess.run(
+                      ["git", "rm", "--", str(file)],
+                      check=True
+                  )
+                  deleted.append(file.name)
+
+          print(f"Total HTML files deleted: {len(deleted)}")
+
+          for name in deleted:
+              print(f"Deleted: {name}")
+
+          with open("/tmp/deleted_count", "w") as f:
+              f.write(str(len(deleted)))
+          PY
+
+      - name: Commit deletions
+        run: |
+          COUNT=$(cat /tmp/deleted_count)
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No HTML files found. Nothing to delete."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "Delete HTML files from trky folder"
+          git push
